@@ -1,0 +1,1385 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VozLectura — Lector de Textos</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #17171f;
+    --surface3: #1e1e28;
+    --border: rgba(255,255,255,0.07);
+    --accent: #7c6af7;
+    --accent2: #f76ac8;
+    --accent3: #6af7c8;
+    --text: #e8e8f0;
+    --muted: #6a6a80;
+    --glow: rgba(124,106,247,0.3);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+  }
+
+  /* Animated background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 10%, rgba(124,106,247,0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 80% 80%, rgba(247,106,200,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 40% at 60% 30%, rgba(106,247,200,0.05) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 32px 24px;
+    width: 100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* Header */
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    margin: -32px -24px 0;
+    background: rgba(10,10,15,0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    transition: box-shadow 0.3s;
+  }
+
+  header.scrolled {
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-icon {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    box-shadow: 0 0 20px var(--glow);
+  }
+
+  .logo-text {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    background: linear-gradient(135deg, #fff 30%, var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.5px;
+  }
+
+  .logo-sub {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 300;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .badge {
+    background: linear-gradient(135deg, rgba(124,106,247,0.2), rgba(247,106,200,0.15));
+    border: 1px solid rgba(124,106,247,0.3);
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 500;
+    letter-spacing: 0.5px;
+  }
+
+  /* Status bar */
+  .status-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    transition: all 0.3s;
+  }
+
+  .status-bar.speaking {
+    border-color: rgba(124,106,247,0.4);
+    box-shadow: 0 0 20px rgba(124,106,247,0.1);
+  }
+
+  .status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+    transition: all 0.3s;
+  }
+
+  .status-indicator.active {
+    background: var(--accent3);
+    box-shadow: 0 0 8px var(--accent3);
+    animation: pulse 1.5s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.85); }
+  }
+
+  .status-text {
+    font-size: 13px;
+    color: var(--muted);
+    flex: 1;
+  }
+
+  /* Waveform visualizer */
+  .waveform {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    height: 24px;
+    margin-left: auto;
+  }
+
+  .wave-bar {
+    width: 3px;
+    background: var(--accent);
+    border-radius: 2px;
+    opacity: 0.3;
+    transition: height 0.1s;
+    animation: none;
+  }
+
+  .wave-bar.animating {
+    opacity: 0.8;
+    animation: wave-anim 0.8s ease-in-out infinite alternate;
+  }
+
+  .wave-bar:nth-child(1) { animation-delay: 0s; }
+  .wave-bar:nth-child(2) { animation-delay: 0.1s; }
+  .wave-bar:nth-child(3) { animation-delay: 0.2s; }
+  .wave-bar:nth-child(4) { animation-delay: 0.05s; }
+  .wave-bar:nth-child(5) { animation-delay: 0.15s; }
+  .wave-bar:nth-child(6) { animation-delay: 0.25s; }
+  .wave-bar:nth-child(7) { animation-delay: 0.1s; }
+  .wave-bar:nth-child(8) { animation-delay: 0.2s; }
+
+  @keyframes wave-anim {
+    from { height: 4px; }
+    to { height: 18px; }
+  }
+
+  /* Main editor area */
+  .editor-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .editor-toolbar {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+
+  .toolbar-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    font-weight: 500;
+    margin-right: auto;
+  }
+
+  .toolbar-btn {
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 5px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+
+  .toolbar-btn:hover {
+    color: var(--text);
+    border-color: rgba(255,255,255,0.15);
+  }
+
+  .char-count {
+    font-size: 12px;
+    color: var(--muted);
+    padding: 5px 12px;
+    background: var(--surface3);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    font-variant-numeric: tabular-nums;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 220px;
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: vertical;
+    padding: 20px 24px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    color: var(--text);
+    color-scheme: dark;
+  }
+
+  textarea::placeholder {
+    color: var(--muted);
+    font-style: italic;
+    font-weight: 300;
+  }
+
+  /* Controls panel */
+  .controls-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .control-group.full {
+    grid-column: 1 / -1;
+  }
+
+  .control-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .control-label span {
+    color: var(--accent);
+    font-size: 10px;
+    background: rgba(124,106,247,0.15);
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-style: normal;
+    letter-spacing: 0;
+    text-transform: none;
+    font-weight: 500;
+  }
+
+  /* Custom select */
+  .custom-select {
+    position: relative;
+  }
+
+  select {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 36px 10px 14px;
+    border-radius: 10px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+    transition: all 0.2s;
+  }
+
+  select:hover, select:focus {
+    border-color: rgba(124,106,247,0.4);
+    box-shadow: 0 0 0 3px rgba(124,106,247,0.08);
+  }
+
+  select option {
+    background: #1a1a25;
+    color: var(--text);
+  }
+
+  .select-arrow {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    pointer-events: none;
+    font-size: 12px;
+  }
+
+  /* Slider */
+  .slider-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  input[type="range"] {
+    flex: 1;
+    height: 4px;
+    background: var(--surface3);
+    border-radius: 4px;
+    outline: none;
+    appearance: none;
+    cursor: pointer;
+    position: relative;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    cursor: pointer;
+    box-shadow: 0 0 8px var(--glow);
+    transition: transform 0.2s;
+  }
+
+  input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+  }
+
+  .slider-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--accent);
+    min-width: 40px;
+    text-align: right;
+  }
+
+  .slider-marks {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 2px;
+  }
+
+  .slider-mark {
+    font-size: 10px;
+    color: var(--muted);
+    opacity: 0.6;
+  }
+
+  /* Voice cards */
+  .voice-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+  }
+
+  .voice-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .voice-card:hover {
+    border-color: rgba(124,106,247,0.3);
+    transform: translateY(-1px);
+  }
+
+  .voice-card.active {
+    border-color: var(--accent);
+    background: rgba(124,106,247,0.12);
+    box-shadow: 0 0 12px rgba(124,106,247,0.15);
+  }
+
+  .voice-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .voice-card.active .voice-name {
+    color: #a89df8;
+  }
+
+  .voice-lang {
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .voice-gender-tag {
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    display: inline-block;
+    margin-top: 2px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+  }
+
+  .female { background: rgba(247,106,200,0.15); color: #f76ac8; }
+  .male { background: rgba(106,200,247,0.15); color: #6ac8f7; }
+  .neutral { background: rgba(106,247,200,0.15); color: #6af7c8; }
+
+  /* Transport buttons */
+  .transport {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0;
+  }
+
+  .btn-play {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    box-shadow: 0 4px 20px var(--glow);
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .btn-play:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 28px rgba(124,106,247,0.5);
+  }
+
+  .btn-play:active {
+    transform: scale(0.97);
+  }
+
+
+  .btn-skip {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    line-height: 1;
+    gap: 1px;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .btn-skip span {
+    font-size: 9px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0;
+  }
+  .btn-skip:hover {
+    border-color: rgba(124,106,247,0.5);
+    background: rgba(124,106,247,0.12);
+    transform: scale(1.07);
+  }
+  .btn-skip:active { transform: scale(0.93); }
+  .btn-skip.flash {
+    background: rgba(124,106,247,0.3);
+    border-color: var(--accent);
+    box-shadow: 0 0 14px var(--glow);
+  }
+
+  .btn-secondary {
+    height: 40px;
+    padding: 0 18px;
+    border-radius: 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+  }
+
+  .btn-secondary:hover {
+    border-color: rgba(255,255,255,0.2);
+    background: var(--surface3);
+  }
+
+  .btn-danger {
+    border-color: rgba(247,100,100,0.3);
+    color: #f76464;
+  }
+
+  .btn-danger:hover {
+    background: rgba(247,100,100,0.1);
+    border-color: rgba(247,100,100,0.5);
+  }
+
+  .progress-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .progress-bar-bg {
+    height: 4px;
+    background: var(--surface3);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 4px;
+    width: 0%;
+    transition: width 0.5s linear;
+  }
+
+  .progress-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* History section */
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .presets-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .preset-chip {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--muted);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .preset-chip:hover {
+    color: var(--text);
+    border-color: rgba(124,106,247,0.3);
+  }
+
+  /* No voices msg */
+  .no-voices {
+    padding: 14px;
+    background: rgba(247,180,100,0.08);
+    border: 1px solid rgba(247,180,100,0.2);
+    border-radius: 10px;
+    font-size: 13px;
+    color: #f7c06a;
+    line-height: 1.5;
+  }
+
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+  }
+
+  /* Animations on load */
+  .fade-in {
+    animation: fadeIn 0.5s ease forwards;
+    opacity: 0;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .fade-in:nth-child(1) { animation-delay: 0.05s; }
+  .fade-in:nth-child(2) { animation-delay: 0.1s; }
+  .fade-in:nth-child(3) { animation-delay: 0.15s; }
+  .fade-in:nth-child(4) { animation-delay: 0.2s; }
+  .fade-in:nth-child(5) { animation-delay: 0.25s; }
+
+  @media (max-width: 600px) {
+    .controls-panel { grid-template-columns: 1fr; }
+    .transport { flex-wrap: wrap; }
+    header { flex-direction: column; align-items: flex-start; gap: 10px; }
+  }
+
+
+
+  footer {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    padding: 20px 16px;
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.3px;
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+  }
+
+  footer a {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+
+  footer a:hover { color: #a89df8; text-decoration: underline; }
+
+  /* WhatsApp FAB */
+  .wa-fab {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    z-index: 999;
+    background: #25D366;
+    color: #fff;
+    border-radius: 50px;
+    padding: 10px 18px 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 4px 20px rgba(37,211,102,0.45);
+    transition: all 0.25s cubic-bezier(.34,1.56,.64,1);
+    letter-spacing: 0.2px;
+  }
+
+  .wa-fab:hover {
+    transform: scale(1.07) translateY(-2px);
+    box-shadow: 0 8px 28px rgba(37,211,102,0.55);
+    background: #20c05a;
+  }
+
+  .wa-fab:active { transform: scale(0.97); }
+
+  .wa-fab span {
+    white-space: nowrap;
+  }
+
+  @media (max-width: 500px) {
+    .wa-fab { bottom: 18px; right: 16px; padding: 10px 14px 10px 10px; font-size: 12px; }
+  }
+
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <header class="fade-in">
+    <div class="logo">
+      <div class="logo-icon">🎙️</div>
+      <div>
+        <div class="logo-text">VozLectura</div>
+        <div class="logo-sub">Lector de Textos con Voz</div>
+      </div>
+    </div>
+    <div class="badge">Web Speech API</div>
+  </header>
+
+  <!-- Status bar -->
+  <div class="status-bar fade-in" id="statusBar">
+    <div class="status-indicator" id="statusDot"></div>
+    <div class="status-text" id="statusText">Listo para leer · Selecciona una voz y escribe tu texto</div>
+    <div class="waveform" id="waveform">
+      <div class="wave-bar" style="height:6px"></div>
+      <div class="wave-bar" style="height:12px"></div>
+      <div class="wave-bar" style="height:8px"></div>
+      <div class="wave-bar" style="height:16px"></div>
+      <div class="wave-bar" style="height:10px"></div>
+      <div class="wave-bar" style="height:14px"></div>
+      <div class="wave-bar" style="height:7px"></div>
+      <div class="wave-bar" style="height:11px"></div>
+    </div>
+  </div>
+
+  <!-- Text Editor -->
+  <div class="editor-section fade-in">
+    <div class="editor-toolbar">
+      <span class="toolbar-label">Texto a Leer</span>
+      <div class="char-count" id="charCount">0 caracteres</div>
+      <button class="toolbar-btn" onclick="loadSample()">📋 Ejemplo</button>
+      <button class="toolbar-btn" onclick="clearText()">✕ Limpiar</button>
+    </div>
+    <textarea id="textInput"
+      placeholder="Escribe o pega aquí el texto que deseas escuchar..."
+      oninput="updateCharCount()"
+      onkeydown="handleKey(event)"></textarea>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls-panel fade-in">
+
+    <!-- Voice selection -->
+    <div class="control-group full">
+      <div class="control-label">🇪🇸 Español <span id="voiceCountBadge">Cargando...</span></div>
+      <div id="voiceGridContainer">
+        <div class="no-voices" id="noVoicesMsg">
+          ⏳ Cargando voces del sistema... Asegúrate de tener voces en español instaladas.
+        </div>
+        <div class="voice-grid" id="voiceGrid" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- English voices -->
+    <div class="control-group full">
+      <div class="control-label">🇬🇧 English <span id="enVoiceCountBadge"></span></div>
+      <div id="enVoiceGridContainer">
+        <div class="no-voices" id="noEnVoicesMsg" style="display:none">
+          ⚠️ No se encontraron voces en inglés instaladas en este sistema.
+        </div>
+        <div class="voice-grid" id="enVoiceGrid" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- Speed -->
+    <div class="control-group">
+      <div class="control-label">⚡ Velocidad</div>
+      <div class="slider-container">
+        <div class="slider-row">
+          <input type="range" id="speedSlider" min="0.5" max="2" step="0.05" value="1"
+            oninput="updateSpeedDisplay()">
+          <div class="slider-value" id="speedValue">1.0×</div>
+        </div>
+        <div class="slider-marks">
+          <span class="slider-mark">0.5×</span>
+          <span class="slider-mark">Lenta</span>
+          <span class="slider-mark">Normal</span>
+          <span class="slider-mark">Rápida</span>
+          <span class="slider-mark">2×</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pitch -->
+    <div class="control-group">
+      <div class="control-label">🎵 Tono</div>
+      <div class="slider-container">
+        <div class="slider-row">
+          <input type="range" id="pitchSlider" min="0.5" max="2" step="0.05" value="1"
+            oninput="updatePitchDisplay()">
+          <div class="slider-value" id="pitchValue">1.0</div>
+        </div>
+        <div class="slider-marks">
+          <span class="slider-mark">Grave</span>
+          <span class="slider-mark"></span>
+          <span class="slider-mark">Normal</span>
+          <span class="slider-mark"></span>
+          <span class="slider-mark">Agudo</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Volume -->
+    <div class="control-group">
+      <div class="control-label">🔊 Volumen</div>
+      <div class="slider-container">
+        <div class="slider-row">
+          <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="1"
+            oninput="updateVolumeDisplay()">
+          <div class="slider-value" id="volumeValue">100%</div>
+        </div>
+        <div class="slider-marks">
+          <span class="slider-mark">0%</span>
+          <span class="slider-mark"></span>
+          <span class="slider-mark">50%</span>
+          <span class="slider-mark"></span>
+          <span class="slider-mark">100%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick speed presets -->
+    <div class="control-group">
+      <div class="control-label">🎯 Presets Velocidad</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn-secondary" onclick="setSpeed(0.75)" style="padding:0 12px; height:34px; font-size:12px">🐢 0.75×</button>
+        <button class="btn-secondary" onclick="setSpeed(1.0)" style="padding:0 12px; height:34px; font-size:12px">▶ 1.0×</button>
+        <button class="btn-secondary" onclick="setSpeed(1.25)" style="padding:0 12px; height:34px; font-size:12px">⚡ 1.25×</button>
+        <button class="btn-secondary" onclick="setSpeed(1.5)" style="padding:0 12px; height:34px; font-size:12px">🚀 1.5×</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Transport / Playback -->
+  <div class="fade-in" style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:20px; display:flex; flex-direction:column; gap:16px;">
+
+    <div class="transport">
+      <button class="btn-skip" onclick="skipSeconds(-10)" title="Retroceder 10s (tecla ←)">⏪<span>10s</span></button>
+
+      <button class="btn-play" id="playBtn" onclick="togglePlay()" title="Reproducir / Pausar (Ctrl+Enter)">▶</button>
+
+      <button class="btn-skip" onclick="skipSeconds(10)" title="Adelantar 10s (tecla →)">⏩<span>10s</span></button>
+
+      <button class="btn-secondary" id="pauseBtn" onclick="pauseResume()" style="display:none">
+        ⏸ Pausar
+      </button>
+      <button class="btn-secondary btn-danger" onclick="stopSpeech()">⏹ Detener</button>
+
+      <div class="progress-wrap">
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="progressFill"></div>
+        </div>
+        <div class="progress-info">
+          <span id="progressLabel">En espera</span>
+          <span id="wordCount">0 palabras</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Selection read -->
+    <div style="display:flex; gap:8px; align-items:center; border-top:1px solid var(--border); padding-top:14px;">
+      <span style="font-size:12px; color:var(--muted); flex:1;">Selecciona parte del texto y lee solo esa sección</span>
+      <button class="btn-secondary" onclick="readSelection()" style="height:34px; font-size:12px; padding:0 14px;">
+        ✂️ Leer Selección
+      </button>
+    </div>
+
+  </div>
+
+
+  <!-- Recent texts -->
+  <div class="fade-in" id="historySection" style="display:none">
+    <div class="section-title">Textos Recientes</div>
+    <div class="presets-list" id="historyList"></div>
+  </div>
+
+</div>
+
+<footer>
+  VozLectura — Powered by Web Speech API &nbsp;·&nbsp;
+  Desarrollado por <a href="https://contruyotuproyecto.github.io/construyotupoyecto/#contacto" target="_blank" rel="noopener">ConstruyoTuProyecto.com</a>
+</footer>
+
+<!-- Botón flotante WhatsApp -->
+<a class="wa-fab" href="https://walink.co/b4a464" target="_blank" rel="noopener" title="Contáctanos por WhatsApp">
+  <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M16 3C9.373 3 4 8.373 4 15c0 2.385.668 4.61 1.832 6.504L4 29l7.696-1.808A11.94 11.94 0 0016 27c6.627 0 12-5.373 12-12S22.627 3 16 3z" fill="#25D366"/>
+    <path d="M22.003 18.77c-.306-.153-1.81-.893-2.09-.995-.28-.102-.484-.153-.688.153-.203.306-.789.995-.967 1.2-.178.204-.357.23-.663.077-.306-.154-1.292-.476-2.461-1.518-.91-.811-1.524-1.813-1.702-2.119-.178-.306-.019-.471.134-.624.137-.137.306-.357.459-.536.153-.178.204-.306.306-.51.102-.204.051-.383-.026-.536-.077-.153-.688-1.659-.943-2.272-.248-.597-.5-.516-.688-.526l-.587-.01c-.204 0-.535.077-.815.383-.28.306-1.07 1.046-1.07 2.551s1.096 2.96 1.249 3.164c.153.204 2.158 3.296 5.228 4.624.731.315 1.301.503 1.746.644.734.233 1.402.2 1.93.121.589-.088 1.81-.74 2.065-1.455.255-.714.255-1.326.178-1.455-.076-.128-.28-.204-.586-.357z" fill="white"/>
+  </svg>
+  <span>Contacto</span>
+</a>
+
+<script>
+const synth = window.speechSynthesis;
+let voices = [];
+let selectedVoice = null;
+let isSpeaking = false;
+let isPaused = false;
+let history = JSON.parse(localStorage.getItem('vozHistory') || '[]');
+
+// ─── Sistema de chunks ────────────────────────────────────────────────────
+// El texto se divide en frases/oraciones. Cada chunk es una utterance
+// independiente. Al cambiar parámetros, el chunk actual se interrumpe y
+// el SIGUIENTE chunk (no el actual) ya trae los nuevos valores → sin retroceso.
+let chunks = [];          // array de strings (oraciones)
+let chunkIndex = 0;       // cuál chunk está sonando ahora
+let pendingParams = null; // nuevos params esperando para el próximo chunk
+let paramsDirty = false;  // hay cambio de params pendiente
+
+// ─── Dividir texto en chunks (oraciones) ─────────────────────────────────
+function splitChunks(text) {
+  // Dividir por punto, signo de exclamación, interrogación, salto de línea
+  // pero conservar puntuación junto al chunk para que suene natural
+  const raw = text.match(/[^.!?\n]+[.!?\n]*/g) || [text];
+  return raw
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+}
+
+// ─── Construir una utterance con los params actuales ─────────────────────
+function buildUtterance(text) {
+  const u = new SpeechSynthesisUtterance(text);
+  if (selectedVoice) u.voice = selectedVoice;
+  u.rate   = parseFloat(document.getElementById('speedSlider').value);
+  u.pitch  = parseFloat(document.getElementById('pitchSlider').value);
+  u.volume = parseFloat(document.getElementById('volumeSlider').value);
+  u.lang   = selectedVoice ? selectedVoice.lang : 'es-ES';
+  return u;
+}
+
+// ─── Lanzar un chunk específico ──────────────────────────────────────────
+function speakChunk(index) {
+  if (index >= chunks.length) {
+    // Terminamos todos los chunks
+    onAllDone();
+    return;
+  }
+  chunkIndex = index;
+
+  // Si hay params pendientes, aplicarlos ANTES de crear esta utterance
+  // (ya termino el chunk anterior, ahora sí los usamos)
+  const u = buildUtterance(chunks[index]);
+
+  u.onstart = () => {
+    isSpeaking = true; isPaused = false;
+    updateProgressUI();
+    animateWave(true);
+    const vname = selectedVoice
+      ? selectedVoice.name.replace(/Microsoft|Google|Apple|Compact|Natural|Enhanced|Premium/gi,'').trim().split(' ')[0]
+      : 'Sistema';
+    const rate = parseFloat(document.getElementById('speedSlider').value).toFixed(2);
+    setStatus(`🔊 ${vname} · ${rate}× · frase ${index + 1}/${chunks.length}`, true);
+  };
+
+  u.onend = () => {
+    if (!isSpeaking) return; // fue detenido manualmente
+    // Avanzar al siguiente chunk
+    speakChunk(index + 1);
+  };
+
+  u.onerror = (e) => {
+    if (e.error === 'interrupted' || e.error === 'canceled') return;
+    setStatus(`❌ Error: ${e.error}`, false);
+    isSpeaking = false;
+    animateWave(false);
+    document.getElementById('playBtn').textContent = '▶';
+    document.getElementById('pauseBtn').style.display = 'none';
+  };
+
+  synth.speak(u);
+}
+
+function onAllDone() {
+  isSpeaking = false; isPaused = false;
+  setStatus('✅ Lectura completada', false);
+  document.getElementById('playBtn').textContent = '▶';
+  document.getElementById('pauseBtn').style.display = 'none';
+  animateWave(false);
+  document.getElementById('progressFill').style.width = '100%';
+  document.getElementById('progressLabel').textContent = 'Completado';
+  setTimeout(() => {
+    document.getElementById('progressFill').style.width = '0%';
+    document.getElementById('progressLabel').textContent = 'En espera';
+  }, 2500);
+
+}
+
+// ─── Cambio dinámico: interrumpir chunk actual, el siguiente ya usa nuevos params
+function applyParamsNow() {
+  if (!isSpeaking || isPaused) return;
+  // Cancelar el chunk en curso → onend NO se ejecuta (isSpeaking sigue true)
+  // pero necesitamos que onend no dispare speakChunk, así que lo hacemos manual
+  isSpeaking = false;        // evita que onend del chunk actual avance
+  synth.cancel();
+  isSpeaking = true;         // restablecer para el nuevo chunk
+  // Lanzar el SIGUIENTE chunk (no repetir el actual) con los nuevos params
+  setTimeout(() => speakChunk(chunkIndex + 1), 60);
+}
+
+// ─── CARGA DE VOCES ───────────────────────────────────────────────────────
+function loadVoices() {
+  voices = synth.getVoices();
+
+  // ── Español ──────────────────────────────────────────────────────────────
+  const esVoices = voices.filter(v => v.lang.startsWith('es'));
+  const esGrid  = document.getElementById('voiceGrid');
+  const esNoMsg = document.getElementById('noVoicesMsg');
+  const esBadge = document.getElementById('voiceCountBadge');
+
+  const esList = esVoices.length > 0 ? esVoices : [];
+  if (esList.length === 0) {
+    esNoMsg.style.display = ''; esGrid.style.display = 'none';
+    esBadge.textContent = 'No disponible';
+  } else {
+    renderVoices(esList, esGrid, esNoMsg, esBadge, true);
+    esBadge.textContent = `${esList.length} voces`;
+  }
+
+  // ── Inglés ────────────────────────────────────────────────────────────────
+  // Priorizar voces con nombres conocidos (mejor calidad), max 6
+  const enAll = voices.filter(v => v.lang.startsWith('en'));
+  const enFemaleNames = ['zira','susan','hazel','karen','victoria','samantha','fiona','moira','veena','tessa','allison','ava','alice','amelie','claire','emily','kate'];
+  const enMaleNames  = ['david','mark','james','daniel','alex','tom','fred','albert','bruce','lee','ryan','george','oliver'];
+
+  // Separar por género y tomar 1 de cada uno preferiblemente (máx 3 cada uno)
+  const enFemale = enAll.filter(v => enFemaleNames.some(n => v.name.toLowerCase().includes(n)));
+  const enMale   = enAll.filter(v => enMaleNames.some(n => v.name.toLowerCase().includes(n)));
+  // Si no hay por nombre, tomar los primeros disponibles
+  const enFemaleList = enFemale.length ? enFemale.slice(0, 3) : enAll.filter(v => guessGender(v.name) === 'female').slice(0, 2);
+  const enMaleList   = enMale.length   ? enMale.slice(0, 3)   : enAll.filter(v => guessGender(v.name) === 'male').slice(0, 2);
+  // Asegurar al menos 1 de cada género si hay voces en inglés
+  let enList = [...enMaleList, ...enFemaleList];
+  if (!enList.length && enAll.length) enList = enAll.slice(0, 6);
+  // Dedup por nombre
+  enList = enList.filter((v, i, a) => a.findIndex(x => x.name === v.name) === i).slice(0, 6);
+
+  const enGrid  = document.getElementById('enVoiceGrid');
+  const enNoMsg = document.getElementById('noEnVoicesMsg');
+  const enBadge = document.getElementById('enVoiceCountBadge');
+
+  if (!enList.length) {
+    enNoMsg.style.display = ''; enGrid.style.display = 'none';
+    enBadge.textContent = '';
+  } else {
+    renderVoices(enList, enGrid, enNoMsg, enBadge, false);
+    enBadge.textContent = `${enList.length} voces`;
+  }
+}
+
+function renderVoices(voiceList, grid, noMsg, badge, autoSelect) {
+  noMsg.style.display = 'none'; grid.style.display = ''; grid.innerHTML = '';
+  voiceList.forEach((voice, i) => {
+    const card = document.createElement('div');
+    const isFirst = autoSelect && i === 0;
+    card.className = 'voice-card' + (isFirst ? ' active' : '');
+    if (isFirst) selectedVoice = voice;
+    const gender = guessGender(voice.name);
+    const isEn = voice.lang.startsWith('en');
+    const shortName = voice.name.replace(/Microsoft|Google|Apple|Compact|Natural|Enhanced|Premium|Online|Desktop/gi,'').trim();
+    const genderLabel = isEn
+      ? (gender === 'female' ? '♀ Female' : gender === 'male' ? '♂ Male' : '◈ Neutral')
+      : (gender === 'female' ? '♀ Femenino' : gender === 'male' ? '♂ Masculino' : '◈ Neutro');
+    card.innerHTML = `
+      <div class="voice-name">${shortName || voice.name}</div>
+      <div class="voice-lang">${voice.lang}</div>
+      <span class="voice-gender-tag ${gender}">${genderLabel}</span>`;
+    card.onclick = () => selectVoice(voice, card);
+    grid.appendChild(card);
+  });
+}
+
+function guessGender(name) {
+  const l = name.toLowerCase();
+  const female = ['lucia','laura','sofia','maria','sabina','lupe','paulina','ana','elena','rosa','conchita','isabella','valentina','camila','daniela','fernanda','andrea','paloma','pilar','rocio','dolores','gloria','nuria','teresa','lola','zira','susan','hazel','karen','victoria','samantha','fiona','moira','veena','tessa','allison','ava','alice','amelie','claire','emily','kate'];
+  const male   = ['jorge','carlos','diego','pablo','miguel','alejandro','rafael','antonio','manuel','juan','luis','pedro','david','jose','felix','rodrigo','sergio','andres','gabriel','hector','mario','mark','james','daniel','alex','tom','fred','albert','bruce','lee','ryan','george','oliver'];
+  if (female.some(n => l.includes(n))) return 'female';
+  if (male.some(n => l.includes(n))) return 'male';
+  return 'neutral';
+}
+
+function selectVoice(voice, card) {
+  selectedVoice = voice;
+  document.querySelectorAll('.voice-card').forEach(c => c.classList.remove('active'));
+  card.classList.add('active');
+  if (isSpeaking) applyParamsNow();
+}
+
+// ─── CONTROLES PRINCIPALES ────────────────────────────────────────────────
+function togglePlay() {
+  if (isPaused) {
+    pauseResume();          // estaba pausado → reanudar
+  } else if (isSpeaking) {
+    pauseResume();          // está sonando → pausar
+  } else {
+    startSpeech();          // estaba detenido → iniciar desde el principio
+  }
+}
+
+function startSpeech(textOverride) {
+  const raw = textOverride || document.getElementById('textInput').value.trim();
+  if (!raw) { setStatus('⚠️ Escribe algún texto primero', false); return; }
+
+  synth.cancel();
+  isSpeaking = false; isPaused = false;
+
+  chunks = splitChunks(raw);
+  chunkIndex = 0;
+
+  const totalWords = raw.split(/\s+/).filter(Boolean).length;
+  document.getElementById('wordCount').textContent = `${totalWords} palabras · ${chunks.length} frases`;
+
+  document.getElementById('playBtn').textContent = '⏸';
+  document.getElementById('pauseBtn').style.display = '';
+  isSpeaking = true;
+
+  saveHistory(raw);
+  speakChunk(0);
+}
+
+function pauseResume() {
+  if (!isSpeaking) return;
+  if (isPaused) {
+    synth.resume();
+    isPaused = false;
+    setStatus('🔊 Reanudando...', true);
+    document.getElementById('playBtn').textContent = '⏸';
+    document.getElementById('pauseBtn').textContent = '⏸ Pausar';
+    animateWave(true);
+  } else {
+    synth.pause();
+    isPaused = true;
+    setStatus('⏸ Pausado', false);
+    document.getElementById('playBtn').textContent = '▶';
+    document.getElementById('pauseBtn').textContent = '▶ Reanudar';
+    animateWave(false);
+  }
+}
+
+function stopSpeech() {
+  isSpeaking = false; isPaused = false;
+  synth.cancel();
+  setStatus('⏹ Detenido', false);
+  document.getElementById('playBtn').textContent = '▶';
+  document.getElementById('pauseBtn').style.display = 'none';
+  animateWave(false);
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('progressLabel').textContent = 'En espera';
+}
+
+function readSelection() {
+  const ta = document.getElementById('textInput');
+  const sel = ta.value.substring(ta.selectionStart, ta.selectionEnd).trim();
+  if (!sel) { setStatus('⚠️ Selecciona texto primero', false); return; }
+  startSpeech(sel);
+}
+
+// ─── PROGRESO ─────────────────────────────────────────────────────────────
+function updateProgressUI() {
+  if (!chunks.length) return;
+  const pct = Math.round((chunkIndex / chunks.length) * 100);
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressLabel').textContent = `Frase ${chunkIndex + 1} / ${chunks.length}`;
+}
+
+// ─── UI HELPERS ───────────────────────────────────────────────────────────
+function setStatus(msg, active) {
+  document.getElementById('statusText').textContent = msg;
+  document.getElementById('statusDot').className = 'status-indicator' + (active ? ' active' : '');
+  document.getElementById('statusBar').className = 'status-bar' + (active ? ' speaking' : '');
+}
+
+function animateWave(active) {
+  document.querySelectorAll('.wave-bar').forEach(b => {
+    b.className = 'wave-bar' + (active ? ' animating' : '');
+  });
+}
+
+function updateCharCount() {
+  const len = document.getElementById('textInput').value.length;
+  document.getElementById('charCount').textContent = `${len.toLocaleString()} caracteres`;
+}
+
+// Sliders: actualizar label + aplicar dinámicamente si está sonando
+function onSliderChange(labelFn) {
+  labelFn();
+  if (isSpeaking && !isPaused) applyParamsNow();
+}
+
+function updateSpeedDisplay() {
+  onSliderChange(() => {
+    document.getElementById('speedValue').textContent =
+      parseFloat(document.getElementById('speedSlider').value).toFixed(2) + '×';
+  });
+}
+
+function updatePitchDisplay() {
+  onSliderChange(() => {
+    document.getElementById('pitchValue').textContent =
+      parseFloat(document.getElementById('pitchSlider').value).toFixed(2);
+  });
+}
+
+function updateVolumeDisplay() {
+  onSliderChange(() => {
+    document.getElementById('volumeValue').textContent =
+      Math.round(parseFloat(document.getElementById('volumeSlider').value) * 100) + '%';
+  });
+}
+
+function setSpeed(val) {
+  document.getElementById('speedSlider').value = val;
+  updateSpeedDisplay();
+}
+
+function clearText() {
+  stopSpeech();
+  document.getElementById('textInput').value = '';
+  updateCharCount();
+}
+
+function loadSample() {
+  document.getElementById('textInput').value =
+    'Bienvenido a VozLectura. Esta herramienta divide el texto en frases. ' +
+    'Puedes cambiar la velocidad, el tono o el volumen en cualquier momento. ' +
+    'Los cambios se aplican en la siguiente frase, sin interrupciones bruscas. ' +
+    'Ideal para estudiar, revisar documentos o escuchar artículos mientras trabajas. ' +
+    '¡Prueba mover el slider de velocidad mientras escuchas esto!';
+  updateCharCount();
+}
+
+function handleKey(e) {
+  if (e.ctrlKey && e.key === 'Enter') togglePlay();
+}
+
+// ─── HISTORIAL ────────────────────────────────────────────────────────────
+function saveHistory(text) {
+  const short = text.slice(0, 60) + (text.length > 60 ? '...' : '');
+  history = [short, ...history.filter(h => h !== short)].slice(0, 8);
+  try { localStorage.setItem('vozHistory', JSON.stringify(history)); } catch(e){}
+  renderHistory();
+}
+
+function renderHistory() {
+  if (!history.length) return;
+  document.getElementById('historySection').style.display = '';
+  document.getElementById('historyList').innerHTML = history.map(h =>
+    `<div class="preset-chip" title="${h}">${h}</div>`).join('');
+}
+
+
+// ────────────────────────────────────────────────────────────────────────────
+// SKIP ±10 SEGUNDOS (basado en chunks — ~3s por frase a velocidad 1×)
+// ────────────────────────────────────────────────────────────────────────────
+const SECS_PER_CHUNK_BASE = 3;
+
+function skipSeconds(secs) {
+  if (!chunks.length) return;
+
+  const rate = parseFloat(document.getElementById('speedSlider').value);
+  const secsPerChunk = SECS_PER_CHUNK_BASE / rate;
+  const chunksToSkip = Math.round(secs / secsPerChunk);
+  const targetIndex = Math.max(0, Math.min(chunks.length - 1, chunkIndex + chunksToSkip));
+
+  // Flash visual en el botón correspondiente
+  const btns = document.querySelectorAll('.btn-skip');
+  const btn = secs < 0 ? btns[0] : btns[1];
+  if (btn) { btn.classList.add('flash'); setTimeout(() => btn.classList.remove('flash'), 300); }
+
+  const dir = secs > 0 ? `⏩ +${secs}s` : `⏪ ${secs}s`;
+  setStatus(`${dir} → frase ${targetIndex + 1} / ${chunks.length}`, isSpeaking || isPaused);
+
+  if (isSpeaking && !isPaused) {
+    // Saltar directo: cancelar chunk actual y lanzar el target
+    isSpeaking = false;
+    synth.cancel();
+    isSpeaking = true;
+    setTimeout(() => speakChunk(targetIndex), 60);
+  } else {
+    // Pausado o detenido: solo mover el cursor
+    chunkIndex = targetIndex;
+    updateProgressUI();
+  }
+}
+
+// Teclas ← → para skip (solo si no está enfocado el textarea)
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'ArrowLeft')  skipSeconds(-10);
+  if (e.key === 'ArrowRight') skipSeconds(10);
+});
+
+
+
+
+// ─── INIT ─────────────────────────────────────────────────────────────────
+window.addEventListener('scroll', () => {
+  document.querySelector('header').classList.toggle('scrolled', window.scrollY > 10);
+});
+if (synth.onvoiceschanged !== undefined) synth.onvoiceschanged = loadVoices;
+setTimeout(loadVoices, 200);
+setTimeout(loadVoices, 800);
+renderHistory();
+updateCharCount();
+</script>
+</body>
+</html>
