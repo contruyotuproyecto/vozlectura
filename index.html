@@ -902,7 +902,7 @@
       <div class="slider-container">
         <div class="slider-row">
           <input type="range" id="speedSlider" min="0.5" max="2" step="0.05" value="1"
-            oninput="updateSpeedDisplay()">
+            oninput="updateSpeedLabel()" onchange="updateSpeedApply()">
           <div class="slider-value" id="speedValue">1.0×</div>
         </div>
         <div class="slider-marks">
@@ -921,7 +921,7 @@
       <div class="slider-container">
         <div class="slider-row">
           <input type="range" id="pitchSlider" min="0.5" max="2" step="0.05" value="1"
-            oninput="updatePitchDisplay()">
+            oninput="updatePitchLabel()" onchange="updatePitchApply()">
           <div class="slider-value" id="pitchValue">1.0</div>
         </div>
         <div class="slider-marks">
@@ -940,7 +940,7 @@
       <div class="slider-container">
         <div class="slider-row">
           <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="1"
-            oninput="updateVolumeDisplay()">
+            oninput="updateVolumeLabel()" onchange="updateVolumeApply()">
           <div class="slider-value" id="volumeValue">100%</div>
         </div>
         <div class="slider-marks">
@@ -1121,15 +1121,28 @@ function onAllDone() {
 }
 
 // ─── Cambio dinámico: interrumpir chunk actual, el siguiente ya usa nuevos params
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+let applyDebounceTimer = null;
+
 function applyParamsNow() {
   if (!isSpeaking || isPaused) return;
-  // Cancelar el chunk en curso → onend NO se ejecuta (isSpeaking sigue true)
-  // pero necesitamos que onend no dispare speakChunk, así que lo hacemos manual
-  isSpeaking = false;        // evita que onend del chunk actual avance
-  synth.cancel();
-  isSpeaking = true;         // restablecer para el nuevo chunk
-  // Lanzar el SIGUIENTE chunk (no repetir el actual) con los nuevos params
-  setTimeout(() => speakChunk(chunkIndex + 1), 60);
+
+  // En móvil: debounce de 400ms para no llamar esto 20 veces mientras arrastra
+  // En desktop: debounce de 80ms (casi instantáneo)
+  const delay = isMobile ? 400 : 80;
+
+  clearTimeout(applyDebounceTimer);
+  applyDebounceTimer = setTimeout(() => {
+    if (!isSpeaking || isPaused) return; // verificar de nuevo tras el delay
+    isSpeaking = false;   // evita que onend del chunk actual avance
+    synth.cancel();
+    isSpeaking = true;
+    // En iOS necesitamos más tiempo para que el motor libere el canal
+    const resumeDelay = isMobile ? 300 : 60;
+    setTimeout(() => {
+      if (isSpeaking) speakChunk(chunkIndex + 1);
+    }, resumeDelay);
+  }, delay);
 }
 
 // ─── CARGA DE VOCES ───────────────────────────────────────────────────────
@@ -1217,7 +1230,7 @@ function selectVoice(voice, card) {
   selectedVoice = voice;
   document.querySelectorAll('.voice-card').forEach(c => c.classList.remove('active'));
   card.classList.add('active');
-  if (isSpeaking) applyParamsNow();
+  if (isSpeaking && !isPaused) applyParamsNow();
 }
 
 // ─── CONTROLES PRINCIPALES ────────────────────────────────────────────────
@@ -1315,32 +1328,39 @@ function updateCharCount() {
   document.getElementById('charCount').textContent = `${len.toLocaleString()} caracteres`;
 }
 
-// Sliders: actualizar label + aplicar dinámicamente si está sonando
-function onSliderChange(labelFn) {
-  labelFn();
+// Sliders: label en tiempo real (oninput) — re-síntesis solo al soltar (onchange)
+// Esto evita que en móvil se cancele la reproducción 20 veces mientras arrastra
+
+function updateSpeedLabel() {
+  // Solo actualiza el número visible — no toca la síntesis
+  document.getElementById('speedValue').textContent =
+    parseFloat(document.getElementById('speedSlider').value).toFixed(2) + '×';
+}
+function updateSpeedApply() {
+  // Se dispara al SOLTAR el slider
+  updateSpeedLabel();
   if (isSpeaking && !isPaused) applyParamsNow();
 }
 
-function updateSpeedDisplay() {
-  onSliderChange(() => {
-    document.getElementById('speedValue').textContent =
-      parseFloat(document.getElementById('speedSlider').value).toFixed(2) + '×';
-  });
+function updatePitchLabel() {
+  document.getElementById('pitchValue').textContent =
+    parseFloat(document.getElementById('pitchSlider').value).toFixed(2);
+}
+function updatePitchApply() {
+  updatePitchLabel();
+  if (isSpeaking && !isPaused) applyParamsNow();
 }
 
-function updatePitchDisplay() {
-  onSliderChange(() => {
-    document.getElementById('pitchValue').textContent =
-      parseFloat(document.getElementById('pitchSlider').value).toFixed(2);
-  });
+function updateVolumeLabel() {
+  document.getElementById('volumeValue').textContent =
+    Math.round(parseFloat(document.getElementById('volumeSlider').value) * 100) + '%';
+}
+function updateVolumeApply() {
+  updateVolumeLabel();
+  if (isSpeaking && !isPaused) applyParamsNow();
 }
 
-function updateVolumeDisplay() {
-  onSliderChange(() => {
-    document.getElementById('volumeValue').textContent =
-      Math.round(parseFloat(document.getElementById('volumeSlider').value) * 100) + '%';
-  });
-}
+// Compatibilidad: setSpeed usa apply directo (viene de botón, no de arrastre)
 
 function setSpeed(val) {
   document.getElementById('speedSlider').value = val;
