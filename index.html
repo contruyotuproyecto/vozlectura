@@ -1343,21 +1343,38 @@ function updateSpeedApply() {
 }
 
 function updatePitchLabel() {
-  document.getElementById('pitchValue').textContent =
-    parseFloat(document.getElementById('pitchSlider').value).toFixed(2);
+  const v = parseFloat(document.getElementById('pitchSlider').value).toFixed(2);
+  const el = document.getElementById('pitchValue');
+  el.textContent = v;
+  if (isMobile && isSpeaking && !isPaused) {
+    el.title = 'Se aplica en la siguiente frase';
+    el.style.opacity = '0.6';
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.style.opacity = '1'; }, 1500);
+  }
 }
 function updatePitchApply() {
   updatePitchLabel();
-  if (isSpeaking && !isPaused) applyParamsNow();
+  // En móvil iOS el pitch no se puede cambiar mid-utterance sin colapsar el motor.
+  // Se guarda el valor y se aplica en el próximo chunk naturalmente.
+  if (isSpeaking && !isPaused && !isMobile) applyParamsNow();
 }
 
 function updateVolumeLabel() {
-  document.getElementById('volumeValue').textContent =
-    Math.round(parseFloat(document.getElementById('volumeSlider').value) * 100) + '%';
+  const v = Math.round(parseFloat(document.getElementById('volumeSlider').value) * 100) + '%';
+  const el = document.getElementById('volumeValue');
+  el.textContent = v;
+  if (isMobile && isSpeaking && !isPaused) {
+    el.title = 'Se aplica en la siguiente frase';
+    el.style.opacity = '0.6';
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.style.opacity = '1'; }, 1500);
+  }
 }
 function updateVolumeApply() {
   updateVolumeLabel();
-  if (isSpeaking && !isPaused) applyParamsNow();
+  // En móvil el volumen tampoco re-sintetiza — se aplica al próximo chunk
+  if (isSpeaking && !isPaused && !isMobile) applyParamsNow();
 }
 
 // Compatibilidad: setSpeed usa apply directo (viene de botón, no de arrastre)
